@@ -4,9 +4,9 @@ module top (
     input clk,//50Mhz
     input [7:0]AD0, 
     output AD0_CLK,
-    input reset_n
-    // output [7:0]DA0_Data, 
-    // output DA0_Clk
+    input reset_n,
+    output reg [7:0]DA0_Data, 
+    output DA0_Clk
 );
 
 
@@ -61,17 +61,17 @@ localparam adc_idle = 0;
 localparam adc_wait_data = 1;
 localparam adc_wait_fft = 2;
 
-reg [9:0] adc_addr;
+reg [10:0] adc_addr;
 reg [7:0] adc_data;
 reg adc_wen;
 
-reg [9:0] bram_addrb;
+reg [10:0] bram_addrb;
 wire  [7:0] bram_doutb;
 
 reg [4:0] adc_state;
 always @(posedge AD0_CLK) begin
     if (!locked) begin
-        adc_addr <= 0;
+        adc_addr <= 11'h7ff;
         adc_state <= adc_idle;
         adc_wen<= 0;
         adc_data <= 0;
@@ -90,6 +90,7 @@ always @(posedge AD0_CLK) begin
                 adc_wen<= 0;
                 adc_data <= 0;
                 adc_state <= adc_wait_fft;
+                adc_addr <= 11'h7ff;
             end
         end
         adc_wait_fft :begin
@@ -109,7 +110,7 @@ blk_mem_gen_0 u_blk_mem_gen_0(
     .clka                              (AD0_CLK                   ),
     .ena                               (locked                    ),
     .wea                               (adc_wen                   ),
-    .addra                             (adc_addr                  ),//[9:0
+    .addra                             (adc_addr [9:0]                 ),//[9:0
     .dina                              (adc_data                  ),//[7:0
 
 //read
@@ -120,20 +121,17 @@ blk_mem_gen_0 u_blk_mem_gen_0(
 );
 
 wire signed [7:0] adc_signed;
-assign adc_signed = $signed(bram_doutb) - 8'sd128;
+assign adc_signed =  s_axis_data_tvalid ?  ($signed(bram_doutb) - 8'sd128) : 0 ;
 
 /*fft状态机*/
 localparam                              idle = 0                   ;
 localparam                              wait_config = 1            ;
 localparam                              wait_adc_data = 2          ;
-localparam                              wait_tready = 3            ;//no used
-localparam                              send_data = 4              ;
-localparam                              fft_last_data = 5          ;//no used
-localparam                              fft_data_to_depose = 6     ;//no used
-localparam                              fft_data_to_dram = 7       ;
-localparam                              addr_to_zero = 11          ;
-localparam                              dram_data_to_ifft = 8      ;
-localparam                              wait_new_adc_data = 10     ;
+localparam                              send_data = 3              ;
+localparam                              fft_data_to_dram = 4       ;
+localparam                              addr_to_zero = 5           ;
+localparam                              dram_data_to_ifft = 6      ;
+localparam                              wait_new_adc_data = 7      ;
 
 
 reg [4:0] state ;
@@ -155,7 +153,7 @@ always @(posedge clk ) begin
                     ifft_s_axis_data_tlast <= 0;
                     ifft_s_axis_data_tvalid <= 0;
                     s_axis_data_tvalid <=0;
-                    bram_addrb <= 0;
+                    bram_addrb <= 11'h7ff;
             end 
             wait_config: begin 
                             // s_axis_config_tvalid <= 1;
@@ -175,7 +173,7 @@ always @(posedge clk ) begin
                                  if (bram_addrb== 1023) begin
                                     state <= fft_data_to_dram;//输入结束后 等待数据输出
                                     s_axis_data_tlast <= 0;
-                                    bram_addrb <= 0;
+                                    bram_addrb <= 11'h7ff;
                                 end 
                             end
             end
@@ -206,10 +204,9 @@ always @(posedge clk ) begin
                                     ifft_s_axis_data_tlast <= 0;
                                     addr <= 0;
                                 end 
-                            end
-                            
+                            end       
             end 
-            wait_new_adc_data : begin
+            wait_new_adc_data : begin //开始一个新的adc数据
                             ifft_s_axis_data_tvalid <=0;
                             // wen <= 0; 
                             if (adc_state == adc_wait_data) begin
@@ -260,7 +257,7 @@ assign fft_abs = $signed(re_data)*$signed(re_data)+$signed(im_data)*$signed(im_d
 
 wire m_axis_dout_tvalid;
 wire [31:0]m_axis_dout_tdata;
-//开根
+//开根 
 cordic_0 u_cordic_0(
     .aclk                              (clk                       ),
     .s_axis_cartesian_tvalid           (m_axis_data_tvalid        ),
@@ -274,7 +271,7 @@ cordic_0 u_cordic_0(
 //分离 针对于两个sin相加 no uesd
 reg [31:0] max1_val, max2_val;
 reg [9:0] max1_idx, max2_idx;
-reg [15:0] num;//用于分离
+reg [9:0] num;//用于分离
 
 always @(posedge clk) begin
     if (rst) begin
@@ -282,34 +279,32 @@ always @(posedge clk) begin
         max2_val <= 0;
         max1_idx <= 0;
         max2_idx <= 0;
-        num<=16'h0;
+    end else begin
+        if (m_axis_dout_tvalid  && num < 511 ) begin
+            if (m_axis_dout_tdata > max1_val ) begin
+                max2_val <= max1_val;
+                max2_idx <= max1_idx;
+                max1_val <= m_axis_dout_tdata;
+                max1_idx <= num;
+            end else if (m_axis_dout_tdata > max2_val ) begin
+                max2_val <= m_axis_dout_tdata;
+                max2_idx <= num;
+            end
+        end 
     end
-    if (m_axis_dout_tvalid  && num < 511 ) begin
-        num<=num + 1;
-        if (m_axis_dout_tdata > max1_val ) begin
-            max2_val <= max1_val;
-            max2_idx <= max1_idx;
-            max1_val <= m_axis_dout_tdata;
-            max1_idx <= num;
-        end else if (m_axis_dout_tdata > max2_val ) begin
-            max2_val <= m_axis_dout_tdata;
-            max2_idx <= num;
-        end
-    end else num <= 0;
+
 end
-/***************************************/
-reg [9:0] num_2;//用于存储
 
 
 always @(posedge clk) begin
     if (rst) begin
-        num<=16'h0;
+        num<=10'h0; 
     end  else if (m_axis_dout_tvalid) begin
         num<=num + 1;
-    end else num <= 16'h0;
+    end else num <= 10'h0;
 end
 
-
+/***************************************/
 
 //存入FFT后的数据 48位 
 blk_mem_gen_1 u_dist_mem_gen_1024x24(
@@ -322,7 +317,7 @@ blk_mem_gen_1 u_dist_mem_gen_1024x24(
 );
 
 
-/***********/
+/****************************ifft1 start**********************************************************/
 wire                   [   7:0]         ifft_s_axis_config_tdata   ;
 wire                                    ifft_s_axis_config_tvalid  ;
 wire                                    ifft_s_axis_config_tready  ;
@@ -363,11 +358,52 @@ xfft_1 uxfft_1 (
 
 );
 wire signed [39:0] ifft_re_data;
-wire  [8:0] ifft_re_data_1024;
+wire  [7:0] ifft_re_data_1024;//得再把这个数据写到ram里,再通过dac进行输出
 assign ifft_re_data = ifft_m_axis_data_tdata[39:0];
 assign ifft_re_data_1024 = ifft_re_data / 1024;//其实应该在fft之后就对输出的数据除以1024 这样可以减少对FPGA的资源占用 不过这里最后在ifft做处理也无所谓了
 
+/*使用ram进行存储1024x8*/
+/*双端口ram 用于处理跨时钟域问题*/
+wire ifft_wen;
+wire [9:0] ifft_addr;
+wire [7:0] ifft_data;
+reg read_en;
+reg [9:0] ifft_addrb;
+wire [7:0] ifft_doutb;
 
+assign ifft_wen = ifft_m_axis_data_tvalid;
+assign ifft_addr = ifft_m_axis_data_tuser;
+assign ifft_data = ifft_re_data_1024;
+
+
+
+blk_mem_gen_0 ifft_to_ram(
+    .clka                              (clk                       ),
+    .ena                               (1                         ),
+    .wea                               (ifft_wen                  ),
+    .addra                             (ifft_addr                 ),//[9:0
+    .dina                              (ifft_data                 ),//[7:0
+
+//read
+    .clkb                              (DA0_Clk                   ),
+    .enb                               (read_en                   ),
+    .addrb                             (ifft_addrb                ),//[9:0
+    .doutb                             (ifft_doutb                ) //[7:0
+);
+
+always @(posedge DA0_Clk) begin
+    if (rst) begin
+        read_en <= 0;
+        ifft_addrb <= 0;
+        DA0_Data <= 0;
+    end else begin
+        read_en <= 1;
+        ifft_addrb <= ifft_addrb + 1;
+        DA0_Data <= ifft_doutb;     
+    end
+end
+
+/***********************ifft1 end***************************************************************/
 
 
 endmodule

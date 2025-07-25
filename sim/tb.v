@@ -20,11 +20,12 @@ module top_tb;
 
   // 正弦波参数
   integer i;
-  integer sample_count;
+  integer sample_count1, sample_count2;
   real pi;
-  real amplitude;
+  real amp1, amp2;
   real offset;
-  real f_sin, f_sample;
+  real f_sin1, f_sin2, f_sample;
+  real sum; //
 
   initial begin
     // 初始化
@@ -32,15 +33,20 @@ module top_tb;
     reset_n = 0;
     AD0 = 0;
 
-    // 配置参数
+    // 参数定义
     pi = 3.1415926;
-    amplitude = 127.0;     // ±127，对应 ±5V
-    offset = 128.0;        // 0V → 128
-    f_sample = 35000000.0; // 采样频率：35MHz
-    f_sin = 50000.0;       // 正弦波频率：50kHz
-    sample_count = f_sample / f_sin; // 一个周期采样点数：700
+    f_sample = 5120000.0; // 采样频率：35 MHz
+    f_sin1 = 50000.0;       // 正弦 A 频率：50kHz
+    f_sin2 = 100000.0;      // 正弦 B 频率：100kHz
 
-    // 释放复位
+    sample_count1 = f_sample / f_sin1; // 700
+    sample_count2 = f_sample / f_sin2; // 350
+
+    amp1 = 63.5; // 每个波振幅，合起来不超过 ±127
+    amp2 = 63.5;
+    offset = 128.0; // 0V 对应 128
+
+    // 等待系统稳定
     #100;
     reset_n = 1;
 
@@ -48,8 +54,15 @@ module top_tb;
     i = 0;
     forever begin
       @(posedge AD0_CLK);
-      AD0 = $rtoi(offset + amplitude * $sin(2 * pi * i / sample_count));
-      i = (i + 1) % sample_count;
+
+      // A + B 信号
+      sum = amp1 * $sin(2 * pi * i / sample_count1)
+          + amp2 * $sin(2 * pi * i / sample_count2);
+
+      // 中心对称映射到 8位无符号
+      AD0 = $rtoi(offset + sum);
+
+      i = i + 1;
     end
   end
 
