@@ -1,12 +1,12 @@
 //v1.0该版本代码 ram读出信号后做fft 再存入ram中 再进行ifft
 //v2.0版本 根据 H题 目前没有配套的adc 和 dac 只从ram中读信号 先分离两个正弦波和（先不判断是否为正弦波还是三角波 
 module top (
-    input clk,//50Mhz
-    input [7:0]AD0, 
-    output AD0_CLK,
-    input reset_n,
-    output reg [7:0]DA0_Data, 
-    output DA0_Clk
+    input                               clk                        ,//50Mhz
+    input              [   7:0]         AD0                        ,
+    output                              AD0_CLK                    ,
+    input                               reset_n                    ,
+    output reg         [   7:0]         DA0_Data                   ,
+    output                              DA0_Clk                     
 );
 
 
@@ -130,7 +130,7 @@ localparam                              wait_adc_data = 2          ;
 localparam                              send_data = 3              ;
 localparam                              fft_data_to_dram = 4       ;
 localparam                              addr_to_zero = 5           ;
-localparam                              dram_data_to_ifft = 6      ;
+localparam                              bram_data_to_ifft = 6      ;
 localparam                              wait_new_adc_data = 7      ;
 
 
@@ -194,7 +194,7 @@ always @(posedge clk ) begin
                             wen <= 0;
                             state <= dram_data_to_ifft;
             end
-            dram_data_to_ifft : begin //这里用的是dram 
+            bram_data_to_ifft : begin //这里用的是bram read data to ifft
                             // wen <= 0;
                             if (ifft_s_axis_data_tready) begin
                                 ifft_s_axis_data_tvalid <=1;
@@ -272,7 +272,7 @@ cordic_0 u_cordic_0(
 reg [31:0] max1_val, max2_val;
 reg [9:0] max1_idx, max2_idx;
 reg [9:0] num;//用于分离
-
+//三角波可以继续加入 新的 找max 以及对应的 val 和 idx 
 always @(posedge clk) begin
     if (rst) begin
         max1_val <= 0;
@@ -292,7 +292,6 @@ always @(posedge clk) begin
             end
         end 
     end
-
 end
 
 
