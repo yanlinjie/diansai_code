@@ -8,7 +8,7 @@ module ifft (
     input                               rst                        ,//high active
     
     //data
-    input                               ifft_s_axis_config_tready  ,
+    output                              ifft_s_axis_config_tready  ,
     input              [  47:0]         ifft_s_axis_data_tdata     ,
     input                               ifft_s_axis_data_tvalid    ,
     output                              ifft_s_axis_data_tready    ,
@@ -16,10 +16,17 @@ module ifft (
 
     //直接输出adc data吧
     input                               dac_clk                    ,
-    output             [   7:0]         dac_data                    
+    output reg         [   7:0]         dac_data                    
 
 );
     
+wire                   [  79:0]         ifft_m_axis_data_tdata     ;
+wire                   [  15:0]         ifft_m_axis_data_tuser     ;
+wire                                    ifft_m_axis_data_tvalid    ;
+// wire                                    ifft_m_axis_data_tready    ;
+wire                                    ifft_m_axis_data_tlast     ;
+
+
 /*fft ip used to ifft*/
 xfft_1 uxfft_1 (
     .aclk                              (clk                       ),// FFT IP核的时钟输入信号，使用系统时钟clk
