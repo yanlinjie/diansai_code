@@ -209,6 +209,7 @@ always @(posedge clk ) begin
                             end
             end
             //目前只考虑两个正弦波相加  这里是处理存入addr中的数据 处理完直接用于ifft
+            //* note 频谱对称 !!!! 
             process_data : begin 
                             addr <= addr + 1;
                             data <= 0;
@@ -216,11 +217,11 @@ always @(posedge clk ) begin
                             addr_1 <= addr_1 + 1;
                             data_1 <= 0;
                             wen_1 <= 1;
-                            if (addr == (max1_idx - 1)) begin
+                            if (addr == (max1_idx - 1) ||   addr == (1024 - max1_idx - 1)) begin
                                 // data <= 0;
                                 wen <= 0;
                             end 
-                            if (addr_1 == (max2_idx - 1)) begin
+                            if (addr_1 == (max2_idx - 1) || addr == (1024 - max2_idx - 1)) begin
                                 wen_1 <= 0;
                                 // data_1 <= 0;
                             end
