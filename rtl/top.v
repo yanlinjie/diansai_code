@@ -27,6 +27,7 @@ ila_0 u_ila_0 (
 
 
 wire rst;
+reg cordic_update;//used to clear to zero
 assign rst = ~ reset_n;
 wire signed [7:0] spo;
 reg [9:0] a;
@@ -110,7 +111,7 @@ blk_mem_gen_0 u_blk_mem_gen_0(
     .clka                              (AD0_CLK                   ),
     .ena                               (locked                    ),
     .wea                               (adc_wen                   ),
-    .addra                             (adc_addr [9:0]                 ),//[9:0
+    .addra                             (adc_addr [9:0]            ),//[9:0
     .dina                              (adc_data                  ),//[7:0
 
 //read
@@ -130,7 +131,7 @@ localparam                              wait_adc_data = 2          ;
 localparam                              send_data = 3              ;
 localparam                              fft_data_to_bram = 4       ;
 localparam                              wait_cordic_down = 8       ;
-localparam  process_data = 9;
+localparam                              process_data = 9           ;
 localparam                              addr_to_zero = 5           ;
 localparam                              bram_data_to_ifft = 6      ;
 localparam                              wait_new_adc_data = 7      ;
@@ -146,6 +147,7 @@ always @(posedge clk ) begin
         s_axis_data_tvalid <=0;
         wen <= 0;  
         wen_1 <= 0;  
+        cordic_update <= 0;
         // s_axis_config_tvalid <= 0;
     end else begin
         case (state)
@@ -196,7 +198,8 @@ always @(posedge clk ) begin
                                 state <= wait_cordic_down; 
                             end
             end 
-            wait_cordic_down : begin
+            //上面和下面这个状态，fft结果输出的同时，既有 fft数据存入ram 又有fft数据进行开根号
+            wait_cordic_down : begin //
                             addr <= 0;
                             wen <= 0;
                             addr_1 <= 0;
@@ -205,7 +208,8 @@ always @(posedge clk ) begin
                                 state <= process_data ;
                             end
             end
-            process_data : begin //目前只考虑两个正弦波相加
+            //目前只考虑两个正弦波相加  这里是处理存入addr中的数据 处理完直接用于ifft
+            process_data : begin 
                             addr <= addr + 1;
                             data <= 0;
                             wen <= 1;
@@ -222,10 +226,11 @@ always @(posedge clk ) begin
                             end
                             if (addr == 1023) begin
                                 state <= addr_to_zero;
+                                cordic_update <= 1;
                             end
                              
             end
-
+            //地址清零
             addr_to_zero : begin //清零addr
                             addr <= 0;
                             wen <= 0;
@@ -233,8 +238,10 @@ always @(posedge clk ) begin
                             wen_1 <= 0;
                             state <= bram_data_to_ifft;
             end
+            //重新遍历地址进行ifft 并在ifft module中进行dac输出
             bram_data_to_ifft : begin //这里用的是bram read data to ifft
                             // wen <= 0;
+                            cordic_update <= 0;
                             if (ifft_s_axis_data_tready) begin
                                 ifft_s_axis_data_tvalid <=1;
                                 addr <= addr + 1;
@@ -288,76 +295,24 @@ xfft_0 test (
     .m_axis_data_tlast                 (m_axis_data_tlast         ) // 输出数据最后一个样本的指示信号
 
 );
-
-
-assign re_data = m_axis_data_tdata[23:0];
-assign im_data = m_axis_data_tdata[47:24];
-
-//平方
-assign fft_abs = $signed(re_data)*$signed(re_data)+$signed(im_data)*$signed(im_data);
-
-wire m_axis_dout_tvalid;
-wire [31:0]m_axis_dout_tdata;
-//开根 
-cordic_0 u_cordic_0(
-    .aclk                              (clk                       ),
-    .s_axis_cartesian_tvalid           (m_axis_data_tvalid        ),
-    .s_axis_cartesian_tdata            (fft_abs                   ),
-    .m_axis_dout_tvalid                (m_axis_dout_tvalid        ),
-    .m_axis_dout_tdata                 (m_axis_dout_tdata         ) 
-
+/**********************对fft后的数据进行处理********************************/
+// /***************可以扩展为信号检测 最后需要分辨三角波和正弦波******************/
+wire  [31:0] max1_val, max2_val;
+wire  [9:0] max1_idx, max2_idx; //max1为低点 max2为高点
+process_fft_data u_process_fft_data(
+    .clk                               (clk                       ),
+    .rst                               (rst                       ),
+    .m_axis_data_tdata                 (m_axis_data_tdata         ),
+    .m_axis_data_tvalid                (m_axis_data_tvalid        ),
+    .update                            (cordic_update             ),
+    .cordic_down                       (cordic_down               ),
+    .wave_type                         (wave_type                 ),//no used
+    .max1_val                          (max1_val                  ),
+    .max2_val                          (max2_val                  ),
+    .max1_idx                          (max1_idx                  ),
+    .max2_idx                          (max2_idx                  ) 
 );
 
-/***************可以扩展为信号检测 最后需要分辨三角波和正弦波******************/
-//分离 针对于两个sin相加 no uesd
-reg [31:0] max1_val, max2_val;
-reg [9:0] max1_idx, max2_idx;
-reg [9:0] num;//用于分离
-//三角波可以继续加入 新的 找max 以及对应的 val 和 idx 
-always @(posedge clk) begin
-    if (rst) begin
-        max1_val <= 0;
-        max2_val <= 0;
-        max1_idx <= 0;
-        max2_idx <= 0;
-    end else begin
-        if (m_axis_dout_tvalid  && num < 511 ) begin
-            if (m_axis_dout_tdata > max1_val ) begin
-                max2_val <= max1_val;
-                max2_idx <= max1_idx;
-                max1_val <= m_axis_dout_tdata;
-                max1_idx <= num;
-            end else if (m_axis_dout_tdata > max2_val ) begin
-                max2_val <= m_axis_dout_tdata;
-                max2_idx <= num;
-            end
-        end else if ( state == addr_to_zero) begin //!记得清0
-                max1_val <= 0;
-                max2_val <= 0;
-                max1_idx <= 0;
-                max2_idx <= 0;
-        end
-    end
-end
-
-reg cordic_down;
-always @(posedge clk) begin
-    if (rst) begin
-        num <= 10'h0; 
-        cordic_down <= 0;
-    end  else begin        
-    if (m_axis_dout_tvalid) begin
-        num <= num + 1;
-        if (num == 1022) begin
-            cordic_down <= 1;
-        end
-    end else begin
-            num <= 10'h0;
-            cordic_down <= 0;
-        end 
-    end
-
-end
 
 /******************two bram to store fft data*********************/
 reg                    [   9:0]         addr                       ;
@@ -389,6 +344,8 @@ blk_mem_gen_1 u_dist_mem_gen_1024x24_1(
     .douta                             (out_data_1                ) //[47:0]
 );
 
+
+/****************************two channel ifft***********************************************/
 /****************************ifft1 start**********************************************************/
 
 wire                                    ifft_s_axis_config_tready  ;
