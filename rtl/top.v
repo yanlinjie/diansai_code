@@ -423,11 +423,11 @@ assign DA0_Data = dac_data + 128 ;
 //两个ifft应该只有数据是可以不一样的，其他的信号感觉可以完全共用
 /****************************ifft2 start**********************************************************/
 
-wire                                    ifft_s_axis_config_tready  ;
+wire                                    ifft_s_axis_config_tready_1  ;
 wire                   [  47:0]         ifft_s_axis_data_tdata_1     ;
-reg                                     ifft_s_axis_data_tvalid    ;
-wire                                    ifft_s_axis_data_tready    ;
-reg                                     ifft_s_axis_data_tlast     ;
+// reg                                     ifft_s_axis_data_tvalid    ;
+wire                                    ifft_s_axis_data_tready_1    ;
+// reg                                     ifft_s_axis_data_tlast     ;
 
 assign ifft_s_axis_data_tdata_1 = out_data_1;
 
@@ -435,10 +435,10 @@ assign ifft_s_axis_data_tdata_1 = out_data_1;
 ifft u_ifft2(
     .clk                               (clk                       ),//i
     .rst                               (rst                       ),//i
-    .ifft_s_axis_config_tready         (ifft_s_axis_config_tready ),//o
+    .ifft_s_axis_config_tready         (ifft_s_axis_config_tready_1 ),//o
     .ifft_s_axis_data_tdata            (ifft_s_axis_data_tdata_1  ),
     .ifft_s_axis_data_tvalid           (ifft_s_axis_data_tvalid   ),
-    .ifft_s_axis_data_tready           (ifft_s_axis_data_tready   ),//o
+    .ifft_s_axis_data_tready           (ifft_s_axis_data_tready_1   ),//o
     .ifft_s_axis_data_tlast            (ifft_s_axis_data_tlast    ),
     //dac
     .dac_clk                           (DA1_Clk                   ),
