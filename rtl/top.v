@@ -183,7 +183,7 @@ always @(posedge clk ) begin
                                 end 
                             end
             end
-            fft_data_to_bram   : begin //write to two bram
+            fft_data_to_bram   : begin //write to two bram //! 这里面存的数据是复数 不是幅度!!！！
                             s_axis_data_tvalid <=0;
                             if (m_axis_data_tvalid) begin
                                 addr <= m_axis_data_tuser;
@@ -210,6 +210,7 @@ always @(posedge clk ) begin
             end
             //目前只考虑两个正弦波相加  这里是处理存入addr中的数据 处理完直接用于ifft
             //* note 频谱对称 !!!! 
+            //! 这里面存的数据是复数 不是幅度!!！！
             process_data : begin 
                             addr <= addr + 1;
                             data <= 0;
@@ -217,17 +218,19 @@ always @(posedge clk ) begin
                             addr_1 <= addr_1 + 1;
                             data_1 <= 0;
                             wen_1 <= 1;
-                            if (addr == (max1_idx - 1) ||   addr == (1024 - max1_idx - 1)) begin
+                            if (   addr == (max1_idx - 1)   || addr == (1024 - max1_idx - 1)   || addr == (3*max1_idx - 1) || addr == (1024 - 3*max1_idx - 1) 
+                                || addr == (5*max1_idx - 1) || addr == (1024 - 5*max1_idx - 1) || addr == (7*max1_idx - 1) || addr == (1024 - 7*max1_idx - 1)) begin
                                 // data <= 0;
                                 wen <= 0;
                             end 
-                            if (addr_1 == (max2_idx - 1) || addr == (1024 - max2_idx - 1)) begin
+                            if (addr_1 == (max2_idx - 1) || addr == (1024 - max2_idx - 1) || addr == (3*max2_idx - 1) || addr == (1024 - 3*max2_idx - 1) 
+                                || addr == (5*max2_idx - 1) || addr == (1024 - 5*max2_idx - 1) || addr == (7*max2_idx - 1) || addr == (1024 - 7*max2_idx - 1)) begin
                                 wen_1 <= 0;
                                 // data_1 <= 0;
                             end
                             if (addr == 1023) begin
                                 state <= addr_to_zero;
-                                cordic_update <= 1;
+                                // cordic_update <= 1;
                             end
                              
             end
@@ -242,7 +245,7 @@ always @(posedge clk ) begin
             //重新遍历地址进行ifft 并在ifft module中进行dac输出
             bram_data_to_ifft : begin //这里用的是bram read data to ifft
                             // wen <= 0;
-                            cordic_update <= 0;
+                            // cordic_update <= 0;
                             if (ifft_s_axis_data_tready) begin
                                 ifft_s_axis_data_tvalid <=1;
                                 addr <= addr + 1;
@@ -252,12 +255,14 @@ always @(posedge clk ) begin
                                     ifft_s_axis_data_tlast <= 0;
                                     addr <= 0;
                                     addr_1 <= 0;
+                                    cordic_update <= 1;
                                 end 
                             end       
             end 
             wait_new_adc_data : begin //开始一个新的adc数据
                             ifft_s_axis_data_tvalid <=0;
                             // wen <= 0; 
+                            cordic_update <= 0;
                             if (adc_state == adc_wait_data) begin
                                 state <= wait_adc_data;
                             end
