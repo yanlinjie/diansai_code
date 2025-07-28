@@ -1,5 +1,20 @@
-//v1.0该版本代码 ram读出信号后做fft 再存入ram中 再进行ifft
-//v2.0版本 根据 H题 目前没有配套的adc 和 dac 只从ram中读信号 先分离两个正弦波和（先不判断是否为正弦波还是三角波 
+//!()由于输入信号的振幅 和 频谱幅度的关系 当仿真的时候 ,输入信号的振幅改变时，需要修该相应的参数 不然无法进行分离(会有bug) 
+/*
+!该模块的这些参数 是和输入信号的振幅相关的 
+    localparam sin_1 = 32400;
+    localparam triangle_1 = 26000;
+    localparam triangle_3 = 3000;
+    localparam triangle_5 = 1000;
+    localparam triangle_7 = 550;
+    localparam triangle_9 = 330;
+    localparam triangle_11 = 220;
+    localparam triangle_13 = 176;
+    localparam triangle_15 = 124;
+    localparam triangle_17 = 97;
+!process_fft_data模块的这些参数
+    parameter triangle_3 = 2770, 
+    parameter triangle_5 = 954
+*/
 module top (
     input                               clk                        ,//50Mhz
     input              [   7:0]         AD0                        ,
@@ -10,8 +25,16 @@ module top (
     output             [   7:0]         DA1_Data                   ,
     output                              DA1_Clk                     
 );
-
-
+localparam sin_1 = 32400;
+localparam triangle_1 = 26000;
+localparam triangle_3 = 3000;
+localparam triangle_5 = 1000;
+localparam triangle_7 = 550;
+localparam triangle_9 = 330;
+localparam triangle_11 = 220;
+localparam triangle_13 = 176;
+localparam triangle_15 = 124;
+localparam triangle_17 = 97;
 //debug
 ila_0 u_ila_0 (
     .clk                               (clk                       ),
@@ -206,6 +229,12 @@ always @(posedge clk ) begin
                             wen_1 <= 0;
                             if (cordic_down) begin //开根完成
                                 state <= process_data ;
+                                addr <= 0;
+                                data <= 0;
+                                wen <= 1;
+                                addr_1 <= 0;
+                                data_1 <= 0;
+                                wen_1 <= 1;
                             end
             end
             //目前只考虑两个正弦波相加  这里是处理存入addr中的数据 处理完直接用于ifft
@@ -213,24 +242,76 @@ always @(posedge clk ) begin
             //! 这里面存的数据是复数 不是幅度!!！！
             process_data : begin 
                             addr <= addr + 1;
-                            data <= 0;
+                            // data <= 0;
                             wen <= 1;
                             addr_1 <= addr_1 + 1;
-                            data_1 <= 0;
+                            // data_1 <= 0;
                             wen_1 <= 1;
-                            if (   addr == (max1_idx - 1)   || addr == (1024 - max1_idx - 1)   || addr == (3*max1_idx - 1) || addr == (1024 - 3*max1_idx - 1) 
-                                || addr == (5*max1_idx - 1) || addr == (1024 - 5*max1_idx - 1) || addr == (7*max1_idx - 1) || addr == (1024 - 7*max1_idx - 1)) begin
-                                // data <= 0;
-                                wen <= 0;
-                            end 
-                            if (addr_1 == (max2_idx - 1) || addr == (1024 - max2_idx - 1) || addr == (3*max2_idx - 1) || addr == (1024 - 3*max2_idx - 1) 
-                                || addr == (5*max2_idx - 1) || addr == (1024 - 5*max2_idx - 1) || addr == (7*max2_idx - 1) || addr == (1024 - 7*max2_idx - 1)) begin
-                                wen_1 <= 0;
-                                // data_1 <= 0;
+                            //!得提前一个时钟周期 将wen 和 wen_1 置为0              
+                            if (wave_type[1] == 1 && wave_type[2] == 1) begin //2_idx is triangle
+                                if (addr_1 == (max2_idx - 1) || addr_1 == (1024 - max2_idx - 1) ) begin
+                                    data_1 <= triangle_1;
+                                end else if (addr_1 == (3*max2_idx - 1) || addr_1 == (1024 - 3*max2_idx - 1) ) begin
+                                    data_1 <= triangle_3;
+                                end else if (addr_1 == (5*max2_idx - 1) || addr_1 == (1024 - 5*max2_idx - 1)) begin
+                                    data_1 <= triangle_5;
+                                end else if (addr_1 == (7*max2_idx - 1) || addr_1 == (1024 - 7*max2_idx - 1)) begin
+                                    data_1 <= triangle_7;
+                                end else if (addr_1 == (9*max2_idx - 1) || addr_1 == (1024 - 9*max2_idx - 1)) begin
+                                    data_1 <= triangle_9;
+                                end else if (addr_1 == (11*max2_idx - 1)|| addr_1 == (1024 - 11*max2_idx - 1)) begin
+                                    data_1 <= triangle_11;
+                                end else if (addr_1 == (13*max2_idx - 1)|| addr_1 == (1024 - 13*max2_idx - 1)) begin
+                                    data_1 <= triangle_13;
+                                end else if (addr_1 == (15*max2_idx - 1)|| addr_1 == (1024 - 15*max2_idx - 1)) begin
+                                    data_1 <= triangle_15;
+                                end else if (addr_1 == (17*max2_idx - 1)|| addr_1 == (1024 - 17*max2_idx - 1)) begin
+                                    data_1 <= triangle_17;
+                                end else begin
+                                    data_1 <= 0;
+                                end
+                            end else if (wave_type[1] == 0 && wave_type[2] == 1) begin
+                                if (addr_1 == (max2_idx - 1) || addr_1 == (1024 - max2_idx - 1) ) begin
+                                    data_1 <= sin_1;
+                                end else begin
+                                    data_1 <= 0;
+                                end
                             end
+
+                            if (wave_type[0] == 1 && wave_type[2] == 1 ) begin //1_idx is triangle
+                                if (addr == (max1_idx - 1) || addr == (1024 - max1_idx - 1)) begin
+                                    data <= triangle_1;
+                                end else if (addr == (3*max1_idx - 1) || addr == (1024 - 3*max1_idx - 1)) begin
+                                    data <= triangle_3;
+                                end else if (addr == (5*max1_idx - 1) || addr == (1024 - 5*max1_idx - 1)) begin
+                                    data <= triangle_5;
+                                end else if (addr == (7*max1_idx - 1) || addr == (1024 - 7*max1_idx - 1)) begin
+                                    data <= triangle_7;
+                                end else if (addr == (9*max1_idx - 1) || addr == (1024 - 9*max1_idx - 1)) begin
+                                    data <= triangle_9;
+                                end else if (addr == (11*max1_idx - 1)|| addr == (1024 - 11*max1_idx - 1)) begin
+                                    data <= triangle_11;
+                                end else if (addr == (13*max1_idx - 1)|| addr == (1024 - 13*max1_idx - 1)) begin
+                                    data <= triangle_13;
+                                end else if (addr == (15*max1_idx - 1)|| addr == (1024 - 15*max1_idx - 1)) begin
+                                    data <= triangle_15;
+                                end else if (addr == (17*max1_idx - 1)|| addr == (1024 - 17*max1_idx - 1)) begin
+                                    data <= triangle_17;
+                                end else begin
+                                    data <= 0;
+                                end
+                            end else if (wave_type[0] == 0 && wave_type[2] == 1) begin
+                                if (addr == (max1_idx - 1) || addr == (1024 - max1_idx - 1) ) begin
+                                    data <= sin_1;
+                                end else begin
+                                    data <= 0;
+                                end
+                            end
+
+
+
                             if (addr == 1023) begin
                                 state <= addr_to_zero;
-                                // cordic_update <= 1;
                             end
                              
             end
@@ -305,6 +386,7 @@ xfft_0 test (
 // /***************可以扩展为信号检测 最后需要分辨三角波和正弦波******************/
 wire  [31:0] max1_val, max2_val;
 wire  [9:0] max1_idx, max2_idx; //max1为低点 max2为高点
+wire [2:0] wave_type;
 process_fft_data u_process_fft_data(
     .clk                               (clk                       ),
     .rst                               (rst                       ),
@@ -312,7 +394,7 @@ process_fft_data u_process_fft_data(
     .m_axis_data_tvalid                (m_axis_data_tvalid        ),
     .update                            (cordic_update             ),
     .cordic_down                       (cordic_down               ),
-    .wave_type                         (wave_type                 ),//no used
+    .wave_type                         (wave_type                 ),
     .max1_val                          (max1_val                  ),
     .max2_val                          (max2_val                  ),
     .max1_idx                          (max1_idx                  ),

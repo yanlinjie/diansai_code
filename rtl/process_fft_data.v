@@ -18,7 +18,7 @@ module process_fft_data #(
     input                               update                     ,
 
     output                              cordic_down                ,
-    output             [   1:0]         wave_type                  ,
+    output             [   2:0]         wave_type                  ,
 
     output             [  31:0]         max1_val                   ,
     output             [  31:0]         max2_val                   ,
@@ -132,8 +132,8 @@ always @(posedge clk) begin
                 wea <= 0;
                 addra <= 3*max1_idx; //next clock output data
                 state <= one_peak_read_nop;
-                max2_idx <= max1_idx;
-                max2_val <= max1_val;
+                // max2_idx <= max1_idx;
+                // max2_val <= max1_val;
             end
             one_peak_read_nop : begin
                 // ampl_1 <= douta;
@@ -163,33 +163,34 @@ always @(posedge clk) begin
 
                 end else if (cnt == 1) begin
                     addra <= 3*max2_idx; 
-                    two_peak_3x1_ampl <= douta; // 3*max1_idx 的数据
                 end else if (cnt == 2) begin
                     addra <= 5*max1_idx; 
-                    two_peak_3x2_ampl <= douta; // 3*max2_idx 的数据
+                    two_peak_3x1_ampl <= douta; // 3*max1_idx 的数据  
                 end else if (cnt == 3) begin
                     addra <= 5*max2_idx; 
-                    two_peak_5x1_ampl <= douta; // 5*max1_idx 的数据
+                    two_peak_3x2_ampl <= douta; // 3*max2_idx 的数据
                 end else if (cnt == 4) begin
-                    two_peak_5x2_ampl <= douta; // 5*max2_idx 的数据
+                    two_peak_5x1_ampl <= douta; // 5*max1_idx 的数据
                 end else if (cnt == 5) begin
                     state <= two_peak_compare; 
+                    two_peak_5x2_ampl <= douta; // 5*max2_idx 的数据
                 end
 //!记得清零cnt                
             end
             two_peak_compare:begin
                 cnt <= 0; //清零
                 wave_style[2] <= 1'b1; //清零
-                if (result_3x1 == 1 || result_3x2 == 1) begin
+                if (result_3x1 == 1 || result_5x1 == 1) begin
                     wave_style[0] <= 1'b1; // x + triangle 
                 end else begin
                     wave_style[0] <= 1'b0; // x + sin
                 end
-                if (result_5x1 == 1 || result_5x2 == 1) begin
+                if (result_3x2 == 1 || result_5x2 == 1) begin
                     wave_style[1] <= 1'b1; // triangle + x
                 end else begin
                     wave_style[1] <= 1'b0; // sin + x
                 end
+                state <= idle; // 处理完毕
             end
             default: state <= idle;
         endcase
@@ -256,11 +257,16 @@ always @(posedge clk) begin
                 max2_val <= m_axis_dout_tdata;
                 max2_idx <= num;
             end 
-        end  else if (max1_idx > max2_idx) begin
+        end 
+        else if (max1_idx > max2_idx) begin
                 max1_idx <= max2_idx;
                 max2_idx <= max1_idx;
             end   
-     
+        else if (state == one_peak_read) begin
+                max2_idx <= max1_idx;
+                max2_val <= max1_val;
+        end
+
         else if ( update) begin //!记得清0
                 max1_val <= 0;
                 max2_val <= 0;

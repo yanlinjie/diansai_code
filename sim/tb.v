@@ -30,7 +30,7 @@ module top_tb;
 
   // 类型选择：0 为正弦波，1 为三角波
   integer wave1_type = 1;  // A 波形类型
-  integer wave2_type = 0;  // B 波形类型
+  integer wave2_type = 1;  // B 波形类型
 
   initial begin
     // 初始化
@@ -42,7 +42,7 @@ module top_tb;
     pi = 3.1415926;
     f_sample = 5120000.0;  // 采样频率
     f_sin1 = 20000.0;      // A: 50kHz
-    f_sin2 = 80000.0;     // B: 100kHz
+    f_sin2 = 100000.0;     // B: 100kHz
 
     sample_count1 = f_sample / f_sin1;
     sample_count2 = f_sample / f_sin2;
